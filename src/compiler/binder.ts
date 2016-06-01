@@ -1287,7 +1287,25 @@ namespace ts {
                     declareSymbolAndAddToSymbolTable(node, SymbolFlags.NamespaceModule, SymbolFlags.NamespaceModuleExcludes);
                 }
                 else {
-                    declareSymbolAndAddToSymbolTable(node, SymbolFlags.ValueModule, SymbolFlags.ValueModuleExcludes);
+                    const pattern = tryModulePattern();
+                    if (pattern) {
+                        //TODO: don't really need such a symbol in container.locals...
+                        const symbol = declareSymbol(container.locals, undefined, node, SymbolFlags.ValueModule, SymbolFlags.ValueModuleExcludes);
+                        file.patternAmbientModules = file.patternAmbientModules || [];
+                        file.patternAmbientModules.push({ pattern, symbol });
+                    }
+                    else {
+                        declareSymbolAndAddToSymbolTable(node, SymbolFlags.ValueModule, SymbolFlags.ValueModuleExcludes);
+                    }
+                }
+
+                //TODO: inline?
+                function tryModulePattern(): Pattern | undefined {
+                    if (node.name.kind !== SyntaxKind.StringLiteral) {
+                        return;
+                    }
+                    const text = (<StringLiteral>node.name).text;
+                    return parsePattern(text);
                 }
             }
             else {

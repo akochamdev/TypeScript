@@ -254,7 +254,7 @@ var useDebugMode = true;
 var host = process.env.TYPESCRIPT_HOST || process.env.host || "node";
 var compilerFilename = "tsc.js";
 var LKGCompiler = path.join(LKGDirectory, compilerFilename);
-var builtLocalCompiler = path.join(builtLocalDirectory, compilerFilename);
+var builtLocalCompiler = LKGCompiler;//path.join(builtLocalDirectory, compilerFilename);
 
 /* Compiles a file from a list of sources
     * @param outFile: the target file name

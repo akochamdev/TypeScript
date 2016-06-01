@@ -496,48 +496,21 @@ namespace ts {
             trace(state.host, Diagnostics.baseUrl_option_is_set_to_0_using_this_value_to_resolve_non_relative_module_name_1, state.compilerOptions.baseUrl, moduleName);
         }
 
-        let longestMatchPrefixLength = -1;
-        let matchedPattern: string;
-        let matchedStar: string;
-
+        let match: MatchResult = undefined;
         if (state.compilerOptions.paths) {
             if (state.traceEnabled) {
                 trace(state.host, Diagnostics.paths_option_is_specified_looking_for_a_pattern_to_match_module_name_0, moduleName);
             }
-
-            for (const key in state.compilerOptions.paths) {
-                const pattern: string = key;
-                const indexOfStar = pattern.indexOf("*");
-                if (indexOfStar !== -1) {
-                    const prefix = pattern.substr(0, indexOfStar);
-                    const suffix = pattern.substr(indexOfStar + 1);
-                    if (moduleName.length >= prefix.length + suffix.length &&
-                        startsWith(moduleName, prefix) &&
-                        endsWith(moduleName, suffix)) {
-
-                        // use length of prefix as betterness criteria
-                        if (prefix.length > longestMatchPrefixLength) {
-                            longestMatchPrefixLength = prefix.length;
-                            matchedPattern = pattern;
-                            matchedStar = moduleName.substr(prefix.length, moduleName.length - suffix.length);
-                        }
-                    }
-                }
-                else if (pattern === moduleName) {
-                    // pattern was matched as is - no need to search further
-                    matchedPattern = pattern;
-                    matchedStar = undefined;
-                    break;
-                }
-            }
+            match = matchAPattern(Object.keys(state.compilerOptions.paths), moduleName);
         }
 
-        if (matchedPattern) {
+        if (match) {
+            const {matchedPattern, matchedStar} = match;
             if (state.traceEnabled) {
                 trace(state.host, Diagnostics.Module_name_0_matched_pattern_1, moduleName, matchedPattern);
             }
             for (const subst of state.compilerOptions.paths[matchedPattern]) {
-                const path = matchedStar ? subst.replace("\*", matchedStar) : subst;
+                const path = matchedStar ? subst.replace("*", matchedStar) : subst;
                 const candidate = normalizePath(combinePaths(state.compilerOptions.baseUrl, path));
                 if (state.traceEnabled) {
                     trace(state.host, Diagnostics.Trying_substitution_0_candidate_module_location_Colon_1, subst, path);
@@ -557,6 +530,72 @@ namespace ts {
             }
 
             return loader(candidate, supportedExtensions, failedLookupLocations, !directoryProbablyExists(getDirectoryPath(candidate), state.host), state);
+        }
+    }
+
+    export interface MatchResult {
+        matchedPattern: string;
+        matchedStar: string | undefined;
+    }
+    /**
+     * matchPattern: The pattern string that was the best match.
+     * matchedStar: The content of the '*' in the match.
+     */
+    export function matchAPattern(patternStrings: string[], candidate: string): MatchResult | undefined {
+        let longestMatchPrefixLength = -1;
+        let matchedPattern: string;
+        let matchedStar: string;
+
+        for (const patternString of patternStrings) {
+            const pattern = parsePattern(patternString);
+            if (pattern) {
+                const {prefix, suffix} = pattern;
+                if (candidate.length >= prefix.length + suffix.length &&
+                    startsWith(candidate, prefix) &&
+                    endsWith(candidate, suffix)) {
+
+                    // use length of prefix as betterness criteria
+                    if (prefix.length > longestMatchPrefixLength) {
+                        longestMatchPrefixLength = prefix.length;
+                        matchedPattern = patternString;
+                        matchedStar = candidate.substr(prefix.length, candidate.length - suffix.length);
+                    }
+                }
+            }
+            else if (patternString === candidate) {
+                // pattern was matched as is - no need to search further
+                matchedPattern = patternString;
+                matchedStar = undefined;
+                break;
+            }
+        }
+
+        return matchedPattern === undefined ? undefined : { matchedPattern, matchedStar };
+    }
+
+    //TODO:merge with above somehow
+    export function matchSomePattern<T>(patterns: T[], getPattern: (t: T) => Pattern, candidate: string): T | undefined {
+        let matchedT: T | undefined = undefined;
+        let longestMatchPrefixLength = -1;
+        for (const t of patterns) {
+            const {prefix, suffix} = getPattern(t);
+            if (candidate.length >= prefix.length + suffix.length &&
+                    startsWith(candidate, prefix) &&
+                    endsWith(candidate, suffix) &&
+                    prefix.length > longestMatchPrefixLength) {
+                longestMatchPrefixLength = prefix.length;
+                matchedT = t;
+            }
+        }
+        return matchedT;
+    }
+
+    export interface Pattern { prefix: string; suffix: string; }
+    export function parsePattern(pattern: string): Pattern | undefined {
+        const indexOfStar = pattern.indexOf("*");
+        return indexOfStar === -1 ? undefined : {
+            prefix: pattern.substr(0, indexOfStar),
+            suffix: pattern.substr(indexOfStar + 1)
         }
     }
 
